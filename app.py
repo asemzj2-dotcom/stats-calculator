@@ -1,6 +1,7 @@
 
+# -*- coding: utf-8 -*-
 # =====================================================================
-#  Advanced Statistics & Probability  -  Streamlit app  (17 formulas)
+#  Advanced Statistics & Probability  -  Streamlit app  (15 formulas)
 # =====================================================================
 import re
 from math import sqrt, ceil
@@ -11,7 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
-from scipy.stats import norm, t as tdist, chi2, f as fdist
+from scipy.stats import norm, t as tdist, chi2
 
 st.set_page_config(page_title="Advanced Statistics & Probability", page_icon="📊", layout="wide")
 
@@ -30,9 +31,19 @@ PH = "P\u0302"      # P̂
 TABLE = False   # True -> round z to 2 decimals and use table values, like the lectures
 
 
+def tr(x):
+    """critical value (z, t, chi-square) as printed in the tables: 3 decimals"""
+    return round(float(x), 3) if TABLE else float(x)
+
+
 def zr(z):
     """z as the lecture uses it (2 decimals) when TABLE mode is on"""
     return round(float(z), 2) + 0.0 if TABLE else z
+
+
+def zi(z):
+    """z found backwards from a table (inverse): nearest 0.005, i.e. interpolating between table rows"""
+    return round(round(float(z) / 0.005) * 0.005, 3) + 0.0 if TABLE else z
 
 
 def prob_z(pt, za, zb):
@@ -251,7 +262,7 @@ def law_inverse(v):
     mu, s, side, p = v["mu"], sd_of(v), v["side"], v["p"]
     need(0 < p < 1, "p must be strictly between 0 and 1")
     phi_val = p if side == "lt" else 1 - p
-    z = zr(float(norm.ppf(phi_val)))
+    z = zi(float(norm.ppf(phi_val)))
     k = mu + z * s
     steps = [r"Z=\frac{X-\mu}{\sigma}", tex(r"\mu=@m@,\qquad \sigma=@s@", m=g(mu), s=g(s))]
     if side == "lt":
@@ -293,28 +304,6 @@ def law_chi(v):
     steps += plain_chain(r"\chi^2", pt, a, b, d, prob)
     res = f"P({evt('χ²', pt, a, b, ' ')}) = {prob:.4f}   (k = {k})"
     plot = lambda: prob_plot(d, pt, a, b, prob, "χ²", f"χ² distribution  (k = {k})")
-    return steps, res, [], plot
-
-
-def law_f(v):
-    d1, d2, pt, a, b = int(v["d1"]), int(v["d2"]), v["pt"], v["a"], v["b"]
-    need(d1 >= 1 and d2 >= 1, "d₁ and d₂ must be at least 1")
-    need(a >= 0, "F values must be ≥ 0")
-    d = fdist(d1, d2)
-    prob = prob_of(d, pt, a, b)
-    steps = [r"F=\frac{U_1/d_1}{U_2/d_2}\sim F(d_1,d_2)", tex(r"d_1=@a@,\quad d_2=@b@", a=d1, b=d2)]
-    if d2 > 2:
-        steps.append(tex(r"E(F)=\frac{d_2}{d_2-2}=\frac{@b@}{@c@}=@m@", b=d2, c=d2 - 2, m=f4(d2 / (d2 - 2))))
-    else:
-        steps.append(r"E(F)\ \text{is undefined for } d_2\leq 2")
-    if d2 > 4:
-        var = 2 * d2 ** 2 * (d1 + d2 - 2) / (d1 * (d2 - 2) ** 2 * (d2 - 4))
-        steps.append(tex(r"V(F)=\frac{2d_2^2(d_1+d_2-2)}{d_1(d_2-2)^2(d_2-4)}=@v@", v=f4(var)))
-    else:
-        steps.append(r"V(F)\ \text{is undefined for } d_2\leq 4")
-    steps += plain_chain("F", pt, a, b, d, prob)
-    res = f"P({evt('F', pt, a, b, ' ')}) = {prob:.4f}   (d₁ = {d1}, d₂ = {d2})"
-    plot = lambda: prob_plot(d, pt, a, b, prob, "F", f"F distribution  F({d1}, {d2})")
     return steps, res, [], plot
 
 
@@ -369,38 +358,12 @@ def law_s2(v):
     return steps, res, [], plot
 
 
-def law_s2_moments(v):
-    n, var = int(v["n"]), v["var"]
-    need(n >= 2, "n must be at least 2")
-    need(var > 0, "σ² must be greater than 0")
-    V = 2 * var ** 2 / (n - 1)
-    steps = [r"E\left(\frac{(n-1)s^2}{\sigma^2}\right)=n-1\;\Rightarrow\;E(s^2)=\sigma^2",
-             r"V\left(\frac{(n-1)s^2}{\sigma^2}\right)=2(n-1)\;\Rightarrow\;V(s^2)=\frac{2\sigma^4}{n-1}",
-             tex(r"E(s^2)=@v@", v=g(var)),
-             tex(r"V(s^2)=\frac{2(@v@)^2}{@n@-1}=@V@", v=g(var), n=n, V=f"{V:.4f}"),
-             tex(r"\text{SD}(s^2)=\sqrt{V(s^2)}=@s@", s=f"{sqrt(V):.4f}")]
-    res = f"E(s²) = {var:g}      V(s²) = {V:.4f}"
-
-    def plot():
-        ns = np.arange(2, max(30, 2 * n) + 1)
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(ns, 2 * var ** 2 / (ns - 1), color=BLUE, lw=2.3, label="V(s²) = 2σ⁴/(n−1)")
-        ax.plot(n, V, "o", color=RED, ms=9)
-        ax.annotate(f"n = {n}\nV(s²) = {V:.4f}", (n, V), textcoords="offset points", xytext=(15, 15), color=RED)
-        ax.set_xlabel("sample size n")
-        ax.set_ylabel("V(s²)")
-        ax.set_title("Variability of s² decreases as n increases", color=RED, fontweight="bold")
-        ax.legend()
-        plt.tight_layout()
-        plt.show()
-    return steps, res, [], plot
-
-
 def law_phat(v):
     P, n, pt, a, b = v["P"], int(v["n"]), v["pt"], v["a"], v["b"]
     need(0 < P < 1, "P must be strictly between 0 and 1")
     need(n >= 2, "n must be at least 2")
-    se = sqrt(P * (1 - P) / n)
+    se0 = sqrt(P * (1 - P) / n)
+    se = round(se0, 3) if TABLE else se0
     warns = []
     if n * P < 5 or n * (1 - P) < 5:
         warns.append(f"Normal approximation condition fails:  nP = {n * P:.2f},  n(1−P) = {n * (1 - P):.2f}  (both must be ≥ 5).")
@@ -411,7 +374,7 @@ def law_phat(v):
     steps = [r"E(\hat{P})=P,\qquad V(\hat{P})=\frac{P(1-P)}{n}",
              r"Z=\frac{\hat{P}-P}{\sqrt{P(1-P)/n}}\sim N(0,1)",
              tex(r"V(\hat{P})=\frac{@P@(1-@P@)}{@n@}=@V@,\qquad \text{SE}=\sqrt{V(\hat{P})}=@se@",
-                 P=g(P), n=n, V=f"{se ** 2:.6f}", se=f"{se:.4f}")]
+                 P=g(P), n=n, V=f"{se0 ** 2:.6f}", se=(f"{se:.3f}" if TABLE else f"{se:.4f}"))]
     steps += std_chain(r"\hat{P}", "Z", pt, a, b, P, se, prob)
     res = f"P({evt(PH, pt, a, b, ' ')}) = {prob:.4f}   ({prob * 100:.2f}%)"
     plot = lambda: prob_plot(d, pt, a, b, prob, PH, f"Sampling distribution of {PH}  (mean = P, SE = {se:.4f})",
@@ -425,12 +388,12 @@ def mean_ci_core(xbar, sd, n, conf, kind, pre, warns):
     a2 = al / 2
     S = r"\sigma" if kind == "z_known" else "s"
     if kind == "t":
-        crit, dist = float(tdist.ppf(1 - a2, n - 1)), tdist(n - 1)
+        crit, dist = tr(tdist.ppf(1 - a2, n - 1)), tdist(n - 1)
         form = tex(r"\bar{X}-t_{(\frac{\alpha}{2},\,n-1)}\frac{s}{\sqrt{n}}<\mu<\bar{X}+t_{(\frac{\alpha}{2},\,n-1)}\frac{s}{\sqrt{n}}")
         cr = tex(r"t_{(\frac{\alpha}{2},\,n-1)}=t_{(@a@,\,@d@)}=@c@", a=g(round(a2, 8)), d=n - 1, c=f"{crit:.4f}")
         cl, cname = "t", "t"
     else:
-        crit, dist = float(norm.ppf(1 - a2)), norm(0, 1)
+        crit, dist = tr(norm.ppf(1 - a2)), norm(0, 1)
         form = tex(r"\bar{X}-z_{\frac{\alpha}{2}}\frac{@S@}{\sqrt{n}}<\mu<\bar{X}+z_{\frac{\alpha}{2}}\frac{@S@}{\sqrt{n}}", S=S)
         cr = tex(r"z_{\frac{\alpha}{2}}=z_{@a@}=@c@", a=g(round(a2, 8)), c=f"{crit:.4f}")
         cl, cname = "z", "z"
@@ -488,7 +451,7 @@ def law_sample_size(v):
     sd, e = sd_of(v), v["e"]
     need(e > 0, "e (margin of error) must be greater than 0")
     conf = conf_of(v)
-    z = float(norm.ppf(1 - (1 - conf) / 2))
+    z = tr(norm.ppf(1 - (1 - conf) / 2))
     n_exact = (z * sd / e) ** 2
     n = ceil(n_exact)
     steps = [r"\text{SE}=z_{\frac{\alpha}{2}}\frac{\sigma}{\sqrt{n}}=e\;\Rightarrow\; n=\left(\frac{z_{\alpha/2}\,\sigma}{e}\right)^2",
@@ -532,7 +495,7 @@ def law_ci_prop(v):
         ph = v["ph"]
         need(0 <= ph <= 1, "P̂ must be between 0 and 1")
     al = 1 - conf
-    z = float(norm.ppf(1 - al / 2))
+    z = tr(norm.ppf(1 - al / 2))
     se = sqrt(ph * (1 - ph) / n)
     me = z * se
     lo, hi = ph - me, ph + me
@@ -585,8 +548,8 @@ def law_ci_var(v):
             pre.append(tex(r"s=@s@\;\Rightarrow\; s^2=@s2@", s=g(sv), s2=g(round(s2, 8))))
     df = n - 1
     al = 1 - conf
-    up = float(chi2.ppf(1 - al / 2, df))     # chi2_(alpha/2, n-1)
-    low = float(chi2.ppf(al / 2, df))        # chi2_(1-alpha/2, n-1)
+    up = tr(chi2.ppf(1 - al / 2, df))     # chi2_(alpha/2, n-1)
+    low = tr(chi2.ppf(al / 2, df))        # chi2_(1-alpha/2, n-1)
     lo, hi = df * s2 / up, df * s2 / low
     steps = [r"\frac{(n-1)s^2}{\chi^2_{(\frac{\alpha}{2},\,n-1)}}<\sigma^2<\frac{(n-1)s^2}{\chi^2_{(1-\frac{\alpha}{2},\,n-1)}}"] + pre + [
         tex(r"n=@n@,\quad df=n-1=@d@,\quad s^2=@s2@", n=n, d=df, s2=f"{s2:.5f}"),
@@ -655,10 +618,6 @@ LAWS = [
          formula=r"\chi^2=Z_1^2+\cdots+Z_k^2,\qquad E(\chi^2)=k,\quad V(\chi^2)=2k",
          req="k = degrees of freedom.  Non-negative and right-skewed.",
          fields=[IN("k", "k  (degrees of freedom)", 9)] + PROB("χ²", 16.919, 20.0), fn=law_chi),
-    dict(lec=1, name="6 · F-distribution",
-         formula=r"F=\frac{U_1/d_1}{U_2/d_2}\sim F(d_1,d_2),\quad E(F)=\frac{d_2}{d_2-2},\quad V(F)=\frac{2d_2^2(d_1+d_2-2)}{d_1(d_2-2)^2(d_2-4)}",
-         req="Ratio of two independent χ² variables.  d₂ > 2 for the mean, d₂ > 4 for the variance.",
-         fields=[IN("d1", "d₁  (numerator df)", 5), IN("d2", "d₂  (denominator df)", 10)] + PROB("F", 3.0, 5.0), fn=law_f),
     dict(lec=1, name="7 · Sampling distribution of the mean   X̄",
          formula=r"Z=\frac{\bar{X}-\mu}{\sigma/\sqrt{n}}\ (\sigma\ \text{known}),\quad Z=\frac{\bar{X}-\mu}{s/\sqrt{n}}\ (n\geq30),\quad T=\frac{\bar{X}-\mu}{s/\sqrt{n}}\ (n<30)",
          req="σ known: population normal or n ≥ 30.  σ unknown: n ≥ 30 → Z with s;  n < 30 and normal population → T(n−1).",
@@ -670,10 +629,6 @@ LAWS = [
          formula=r"\chi^2=\frac{(n-1)s^2}{\sigma^2}\sim\chi^2_{(n-1)}",
          req="Random sample from a NORMAL population with known σ².",
          fields=[IN("n", "n  (sample size)", 25), FL("var", "σ²  (population variance)", 6)] + PROB("s²", 9.1, 12.0), fn=law_s2),
-    dict(lec=2, name="9 · Mean and variance of s²    E(s²), V(s²)",
-         formula=r"E(s^2)=\sigma^2,\qquad V(s^2)=\frac{2\sigma^4}{n-1}",
-         req="Random sample from a normal population.",
-         fields=[IN("n", "n  (sample size)", 25), FL("var", "σ²  (population variance)", 6)], fn=law_s2_moments),
     dict(lec=2, name="10 · Sampling distribution of the proportion   P̂",
          formula=r"E(\hat{P})=P,\quad V(\hat{P})=\frac{P(1-P)}{n},\quad Z=\frac{\hat{P}-P}{\sqrt{P(1-P)/n}}\sim N(0,1)",
          req="Normal approximation needs  nP ≥ 5  and  n(1−P) ≥ 5.   (Enter P̂ values as proportions, e.g. 0.35)",
@@ -715,6 +670,9 @@ LAWS = [
                  TX("data", "Raw data  (comma / space / new-line separated)", "46.4, 46.1, 45.8, 47, 46.1, 45.9, 45.8, 46.9, 45.2, 46",
                     show=("mode", {"raw"}))] + CONF, fn=law_ci_var),
 ]
+
+for _i, _law in enumerate(LAWS, 1):          # keep numbering continuous
+    _law["name"] = re.sub(r"^\d+ · ", f"{_i} · ", _law["name"])
 
 LECTURES = ["Lecture 1  ·  Normal Distribution",
             "Lecture 2  ·  T, χ², F distributions & Sampling of X̄",
@@ -762,7 +720,7 @@ st.markdown(f"""
 <div style="background:linear-gradient(90deg,#FFE5D0,#FFF3EA);border-radius:12px;padding:16px 22px;margin-bottom:14px;
             border:1px solid #f1c7a8;text-align:center">
   <div style="font-size:30px;font-weight:bold;color:{RED}">Advanced Statistics &amp; Probability</div>
-  <div style="font-size:15px;color:{BLUE};margin-top:4px">Interactive formula calculator &nbsp;·&nbsp; Lectures 1 – 5 &nbsp;·&nbsp; 17 formulas</div>
+  <div style="font-size:15px;color:{BLUE};margin-top:4px">Interactive formula calculator &nbsp;·&nbsp; Lectures 1 – 5 &nbsp;·&nbsp; {len(LAWS)} formulas</div>
 </div>""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------ sidebar
@@ -826,4 +784,3 @@ if st.session_state.get(f"done_{idx}"):
             plot()
         except Exception as e:  # noqa
             box(RED, "#fdecea", f"⚠️ Could not draw the figure: {esc(str(e))}")
-
