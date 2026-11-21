@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 # =====================================================================
 #  Advanced Statistics & Probability  -  Streamlit app  (17 formulas)
 # =====================================================================
@@ -27,6 +27,24 @@ PH = "P\u0302"      # P̂
 
 
 # ------------------------------------------------------------- helpers
+TABLE = False   # True -> round z to 2 decimals and use table values, like the lectures
+
+
+def zr(z):
+    """z as the lecture uses it (2 decimals) when TABLE mode is on"""
+    return round(float(z), 2) + 0.0 if TABLE else z
+
+
+def prob_z(pt, za, zb):
+    za, zb = zr(za), zr(zb)
+    if pt == "lt":
+        return float(norm.cdf(za))
+    if pt == "gt":
+        return float(norm.sf(za))
+    need(za < zb, "a must be smaller than b")
+    return float(norm.cdf(zb) - norm.cdf(za))
+
+
 def g(x):
     """compact number"""
     return f"{x:.6g}"
@@ -92,6 +110,8 @@ def evt(sym, pt, a, b, sp=""):
 def std_chain(sym, zs, pt, a, b, mu, se, prob, phi=True):
     """P(sym < a) = P(Z < (a-mu)/se) = ...   (lecture style)"""
     za, zb = (a - mu) / se, (b - mu) / se
+    if phi:
+        za, zb = zr(za), zr(zb)
     fr = lambda x: tex(r"\frac{@x@-@m@}{@s@}", x=g(x), m=p_(mu), s=g(se))
     Z = lambda z: f"{z:.2f}"
     if pt == "lt":
@@ -210,6 +230,8 @@ def law_normal(v, count=False):
     mu, s, a, b, pt = v["mu"], sd_of(v), v["a"], v["b"], v["pt"]
     d = norm(mu, s)
     prob = prob_of(d, pt, a, b)
+    if TABLE:
+        prob = prob_z(pt, (a - mu) / s, (b - mu) / s)
     steps = [r"Z=\frac{X-\mu}{\sigma}\sim N(0,1)",
              tex(r"\mu=@m@,\qquad \sigma=@s@", m=g(mu), s=g(s))]
     steps += std_chain("X", "Z", pt, a, b, mu, s, prob)
@@ -229,7 +251,7 @@ def law_inverse(v):
     mu, s, side, p = v["mu"], sd_of(v), v["side"], v["p"]
     need(0 < p < 1, "p must be strictly between 0 and 1")
     phi_val = p if side == "lt" else 1 - p
-    z = norm.ppf(phi_val)
+    z = zr(float(norm.ppf(phi_val)))
     k = mu + z * s
     steps = [r"Z=\frac{X-\mu}{\sigma}", tex(r"\mu=@m@,\qquad \sigma=@s@", m=g(mu), s=g(s))]
     if side == "lt":
@@ -315,6 +337,8 @@ def law_xbar(v):
         stat = r"T=\frac{\bar{X}-\mu}{s/\sqrt{n}}\sim T_{(n-1)}\quad (n<30)"
         warns.append("n < 30 and σ unknown : T-distribution is used (population must be approximately normal).")
     prob = prob_of(dist, pt, a, b)
+    if TABLE and zs == "Z":
+        prob = prob_z(pt, (a - mu) / se, (b - mu) / se)
     steps = [stat, tex(r"\mu=@m@,\quad n=@n@,\quad \frac{@S@}{\sqrt{n}}=\frac{@sv@}{\sqrt{@n@}}=@se@",
                        m=g(mu), n=n, S=S, sv=g(sv), se=f"{se:.4f}")]
     steps += std_chain(r"\bar{X}", zs, pt, a, b, mu, se, prob, phi=phi)
@@ -382,6 +406,8 @@ def law_phat(v):
         warns.append(f"Normal approximation condition fails:  nP = {n * P:.2f},  n(1−P) = {n * (1 - P):.2f}  (both must be ≥ 5).")
     d = norm(P, se)
     prob = prob_of(d, pt, a, b)
+    if TABLE:
+        prob = prob_z(pt, (a - P) / se, (b - P) / se)
     steps = [r"E(\hat{P})=P,\qquad V(\hat{P})=\frac{P(1-P)}{n}",
              r"Z=\frac{\hat{P}-P}{\sqrt{P(1-P)/n}}\sim N(0,1)",
              tex(r"V(\hat{P})=\frac{@P@(1-@P@)}{@n@}=@V@,\qquad \text{SE}=\sqrt{V(\hat{P})}=@se@",
@@ -747,6 +773,10 @@ with st.sidebar:
     here = [i for i, law in enumerate(LAWS) if law["lec"] == lec]
     idx = st.radio("Formula", here, format_func=lambda i: LAWS[i]["name"], label_visibility="collapsed")
     st.divider()
+    TABLE = st.checkbox("Match lecture tables (round z to 2 decimals)", value=True,
+                        help="ON: z is rounded to 2 decimals and φ is read like the printed table, "
+                             "as in the lecture solutions.  OFF: exact values from scipy.")
+    st.divider()
     st.caption("Values are computed exactly with scipy, so they may differ slightly from the printed tables "
                "(e.g. z = 1.96 vs 1.95996). Enter P̂ as a proportion between 0 and 1.")
 
@@ -796,3 +826,4 @@ if st.session_state.get(f"done_{idx}"):
             plot()
         except Exception as e:  # noqa
             box(RED, "#fdecea", f"⚠️ Could not draw the figure: {esc(str(e))}")
+
